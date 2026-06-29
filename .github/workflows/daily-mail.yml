@@ -1,0 +1,30 @@
+name: Daily Abstinence Mail
+
+on:
+  schedule:
+    # GitHub cron uses UTC. 02:00 UTC is 10:00 in China Standard Time.
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  send-mail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate content library
+        run: python send_daily_abstinence_mail.py --dry-run
+
+      - name: Send daily email
+        env:
+          QQ_MAIL_USER: ${{ secrets.QQ_MAIL_USER }}
+          QQ_MAIL_AUTH_CODE: ${{ secrets.QQ_MAIL_AUTH_CODE }}
+          QQ_MAIL_TO: ${{ secrets.QQ_MAIL_TO }}
+        run: python send_daily_abstinence_mail.py
