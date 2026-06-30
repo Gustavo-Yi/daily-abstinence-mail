@@ -2,8 +2,10 @@ name: Daily Abstinence Mail
 
 on:
   schedule:
-    # GitHub cron uses UTC. 02:00 UTC is 10:00 in China Standard Time.
-    - cron: "0 2 * * *"
+    # GitHub cron uses UTC. These are 10:07, 10:17, 10:27, 10:37, and
+    # 10:47 in China Standard Time. Multiple non-hourly attempts avoid the
+    # top-of-hour load window; a daily cache marker prevents duplicate emails.
+    - cron: "7,17,27,37,47 2 * * *"
   workflow_dispatch:
 
 jobs:
@@ -19,12 +21,41 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Compute China date
+        id: china-date
+        shell: bash
+        run: echo "china_date=$(TZ=Asia/Shanghai date +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore sent marker
+        id: sent-marker
+        if: github.event_name == 'schedule'
+        uses: actions/cache/restore@v4
+        with:
+          path: .sent-marker
+          key: daily-mail-sent-${{ steps.china-date.outputs.china_date }}
+
       - name: Validate content library
+        if: github.event_name != 'schedule' || steps.sent-marker.outputs.cache-hit != 'true'
         run: python send_daily_abstinence_mail.py --dry-run
 
       - name: Send daily email
+        if: github.event_name != 'schedule' || steps.sent-marker.outputs.cache-hit != 'true'
         env:
           QQ_MAIL_USER: ${{ secrets.QQ_MAIL_USER }}
           QQ_MAIL_AUTH_CODE: ${{ secrets.QQ_MAIL_AUTH_CODE }}
           QQ_MAIL_TO: ${{ secrets.QQ_MAIL_TO }}
         run: python send_daily_abstinence_mail.py
+
+      - name: Create sent marker
+        if: github.event_name == 'schedule' && steps.sent-marker.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir -p .sent-marker
+          echo "${{ steps.china-date.outputs.china_date }}" > .sent-marker/date.txt
+
+      - name: Save sent marker
+        if: github.event_name == 'schedule' && steps.sent-marker.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .sent-marker
+          key: daily-mail-sent-${{ steps.china-date.outputs.china_date }}
