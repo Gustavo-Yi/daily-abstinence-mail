@@ -14,7 +14,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 CONTENT_PATH = SCRIPT_DIR / "traditional_abstinence_sources.jsonl"
-CONTENT_START_DATE = date(2026, 6, 29)
+CONTENT_START_DATE = date(2026, 7, 5)
 CONTENT_END_DATE = date(2026, 12, 31)
 CHINA_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
 
@@ -83,6 +83,22 @@ THEME_GUIDES = {
 }
 
 
+ACTION_VARIANTS = [
+    "今天删除或屏蔽一个最容易引发色念的入口，先把外缘断掉。",
+    "今天遇到擦边或色情内容，三秒内关闭页面，起身离开原位置。",
+    "今晚睡前一小时手机不进卧室，用读书、洗漱、静坐收束心神。",
+    "今天把最近一次失守前的诱因写下来，只改一个最关键环节。",
+    "今天做二十分钟运动，让身体疲劳有正当出口，不靠刺激消耗精神。",
+    "今天独处前先安排一件正事，不给自己长时间无目的刷屏的空档。",
+]
+
+ROUND_FOCUS = [
+    "",
+    " 今日侧重“防诱因”：少看、少听、少独处试探，不给邪念继续增长的机会。",
+    " 今日侧重“立志气”：把精神用在读书、运动、尽责和正业上，让正气压过欲念。",
+]
+
+
 def load_entries(path: Path = CONTENT_PATH) -> list[dict]:
     entries = []
     for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
@@ -129,22 +145,27 @@ def infer_theme(entry: dict) -> str:
     return "修身"
 
 
-def entry_for_date(day: date) -> tuple[dict, int, int]:
+def entry_for_date(day: date) -> tuple[dict, int, int, int]:
     entries = load_entries()
     expected_days = (CONTENT_END_DATE - CONTENT_START_DATE).days + 1
-    if len(entries) < expected_days:
-        raise ValueError(f"Need at least {expected_days} entries, found {len(entries)}")
+    if not entries:
+        raise ValueError("Need at least one traditional content entry")
 
     offset = (day - CONTENT_START_DATE).days
     if 0 <= offset < expected_days:
-        return entries[offset], offset + 1, expected_days
+        return entries[offset % len(entries)], offset + 1, expected_days, offset // len(entries)
 
-    return entries[day.toordinal() % len(entries)], 0, expected_days
+    return entries[day.toordinal() % len(entries)], 0, expected_days, 0
 
 
 def build_body(now: datetime) -> str:
-    entry, sequence, total = entry_for_date(now.date())
-    guide = THEME_GUIDES[infer_theme(entry)]
+    entry, sequence, total, round_no = entry_for_date(now.date())
+    fallback = THEME_GUIDES[infer_theme(entry)]
+    round_focus = ROUND_FOCUS[min(round_no, len(ROUND_FOCUS) - 1)]
+    guide = {
+        "lesson": (entry.get("lesson") or fallback["lesson"]) + round_focus,
+        "action": entry.get("action") or ACTION_VARIANTS[(entry["id"] + round_no) % len(ACTION_VARIANTS)],
+    }
     sequence_line = f"第 {sequence}/{total} 条" if sequence else "补充条目"
 
     return (
@@ -153,7 +174,7 @@ def build_body(now: datetime) -> str:
         f"序号：{sequence_line}\n"
         f"依据：{entry['source']}\n"
         f"原文：{entry['quote']}\n\n"
-        f"今解：{guide['lesson']}\n\n"
+        f"戒色要点：{guide['lesson']}\n\n"
         f"今日功课：{guide['action']}"
     )
 
